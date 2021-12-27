@@ -2,7 +2,7 @@
 # 主要模型
 
 import numpy as np
-from bert4keras.backend import get_available_gpus
+from bert4keras.backend import sequence_masking
 from bert4keras.layers import *
 from bert4keras.snippets import insert_arguments
 from bert4keras.snippets import delete_arguments
@@ -392,7 +392,10 @@ class UniLM_Mask(object):
         if self.attention_bias is None:
 
             def unilm_mask(s):
-                idxs = K.cumsum(s, axis=1)
+                # add by zard
+                # idxs = K.cumsum(s, axis=1)
+                idxs = K.cumsum(s, axis=0)
+
                 mask = idxs[:, None, :] <= idxs[:, :, None]
                 mask = K.cast(mask, K.floatx())
                 return -(1 - mask[:, None]) * K.infinity()
@@ -2026,6 +2029,12 @@ class T5_Encoder(T5_Base):
             rate=self.dropout_rate,
             name='Encoder-Output-Dropout'
         )
+        x = self.apply(
+            inputs=x,
+            layer=Lambda,
+            function=sequence_masking,
+            name='Encoder-Output-Masked'
+        )
 
         return x
 
@@ -2077,6 +2086,9 @@ class T5_Decoder(LM_Mask, T5_Base):
         """
         c, x = inputs
 
+        c = self.apply(
+            inputs=c, layer=Masking, mask_value=0.0, name='Masked-Context'
+        )
         x = self.apply(
             inputs=x,
             layer=Embedding,
@@ -2354,11 +2366,10 @@ class T5(T5_Base):
         """
         self._encoder.build(**kwargs)
         self._decoder.build(**kwargs)
-        self._decoder.position_bias = None  # 下面call时将重新初始化
         self.encoder = self._encoder.model
         self.decoder = self._decoder.model
         self.inputs = self.encoder.inputs + self.decoder.inputs[1:]
-        self.outputs = self._decoder.call(
+        self.outputs = self.decoder(
             self.encoder.outputs + self.decoder.inputs[1:]
         )
         self.model = Model(self.inputs, self.outputs)
@@ -2391,40 +2402,11 @@ def extend_with_unified_language_model(BaseModel):
     return UnifiedLanguageModel
 
 
-def data_parallel(model, devices=None, parts=None):
-    """通过数据并行来实现模型并行
-    参数：
-        devices：运行设备，默认为所有可用GPU；
-        parts：batch_size分配，默认为均匀划分；
-    """
-    if devices is None:
-        devices = get_available_gpus()
-    elif isinstance(devices, int):
-        devices = ['/device:GPU:%d' % i for i in range(devices)]
-
-    if parts is None:
-        parts = len(devices)
-    else:
-        assert len(devices) == len(parts)
-
-    splited_inputs = BatchSplit(parts)(model.inputs)
-    splited_outputs = [[] for _ in model.outputs]
-    for i, device in enumerate(devices):
-        with tf.device(device):
-            outputs = model(splited_inputs[i::len(devices)])
-            outputs = outputs if isinstance(outputs, list) else [outputs]
-            for j, output in enumerate(outputs):
-                splited_outputs[j].append(output)
-
-    outputs = [BatchConcat()(outputs) for outputs in splited_outputs]
-
-    return Model(model.inputs, outputs)
-
-
 def build_transformer_model(
     config_path=None,
     checkpoint_path=None,
-    model='bert',
+    model='albert',
+    # model='bert',
     application='encoder',
     return_keras_model=True,
     **kwargs
@@ -2447,28 +2429,28 @@ def build_transformer_model(
         configs['segment_vocab_size'] = configs.get('type_vocab_size', 2)
 
     models = {
-        'bert': BERT,
-        'albert': ALBERT,
-        'albert_unshared': ALBERT_Unshared,
-        'roberta': BERT,
-        'nezha': NEZHA,
-        'roformer': RoFormer,
-        'electra': ELECTRA,
-        'gpt': GPT,
-        'gpt2': GPT2,
-        'gpt2_ml': GPT2_ML,
-        't5': T5,
-        't5_encoder': T5_Encoder,
-        't5_decoder': T5_Decoder,
-        't5.1.0': T5,
-        't5.1.0_encoder': T5_Encoder,
-        't5.1.0_decoder': T5_Decoder,
-        't5.1.1': T5,
-        't5.1.1_encoder': T5_Encoder,
-        't5.1.1_decoder': T5_Decoder,
-        'mt5.1.1': T5,
-        'mt5.1.1_encoder': T5_Encoder,
-        'mt5.1.1_decoder': T5_Decoder,
+        'albert': ALBERT
+        # 'bert': BERT
+        # 'albert_unshared': ALBERT_Unshared,
+        # 'roberta': BERT,
+        # 'nezha': NEZHA,
+        # 'roformer': RoFormer,
+        # 'electra': ELECTRA,
+        # 'gpt': GPT,
+        # 'gpt2': GPT2,
+        # 'gpt2_ml': GPT2_ML,
+        # 't5': T5,
+        # 't5_encoder': T5_Encoder,
+        # 't5_decoder': T5_Decoder,
+        # 't5.1.0': T5,
+        # 't5.1.0_encoder': T5_Encoder,
+        # 't5.1.0_decoder': T5_Decoder,
+        # 't5.1.1': T5,
+        # 't5.1.1_encoder': T5_Encoder,
+        # 't5.1.1_decoder': T5_Decoder,
+        # 'mt5.1.1': T5,
+        # 'mt5.1.1_encoder': T5_Encoder,
+        # 'mt5.1.1_decoder': T5_Decoder,
     }
 
     if is_string(model):
