@@ -7,6 +7,13 @@ import logging
 import numpy as np
 from collections import defaultdict
 from bert4keras.backend import K, keras, tf
+from tensorflow.python.framework.graph_util import convert_variables_to_constants
+
+from keras import backend as K
+from tensorflow.python.platform import gfile
+
+wkdir = '/Users/xusijun/Documents/NLP009/bert4keras-master001/keras_to_tensorflow-master'
+pb_filename = 'modelXxxx070.pb'
 
 _open_ = open
 is_py2 = six.PY2
@@ -570,11 +577,42 @@ class AutoRegressiveDecoder(object):
                 if rtype == 'probas':
                     return prediction
                 else:
-                    return np.log(prediction[0] + 1e-12), prediction[1]
+                    result01 = np.log(prediction[0] + 1e-12), prediction[1]
+                    return result01
 
             return new_predict
 
         return actual_decorator
+
+
+    # save model to pb ====================
+    def freeze_session02(session, keep_var_names=None, output_names=None, clear_devices=True):
+        """
+        Freezes the state of a session into a pruned computation graph.
+
+        Creates a new computation graph where variable nodes are replaced by
+        constants taking their current value in the session. The new graph will be
+        pruned so subgraphs that are not necessary to compute the requested
+        outputs are removed.
+        @param session The TensorFlow session to be frozen.
+        @param keep_var_names A list of variable names that should not be frozen,
+                              or None to freeze all the variables in the graph.
+        @param output_names Names of the relevant graph outputs.
+        @param clear_devices Remove the device directives from the graph for better portability.
+        @return The frozen graph definition.
+        """
+        graph = session.graph
+        with graph.as_default():
+            freeze_var_names = list(set(v.op.name for v in tf.global_variables()).difference(keep_var_names or []))
+            output_names = output_names or []
+            output_names += [v.op.name for v in tf.global_variables()]
+            input_graph_def = graph.as_graph_def()
+            if clear_devices:
+                for node in input_graph_def.node:
+                    node.device = ""
+            frozen_graph = convert_variables_to_constants(session, input_graph_def,
+                                                          output_names, freeze_var_names)
+            return frozen_graph
 
     def last_token(self, model):
         """创建一个只返回最后一个token输出的新Model
@@ -585,6 +623,10 @@ class AutoRegressiveDecoder(object):
                 for output in model.outputs
             ]
             self.models[model] = keras.models.Model(model.inputs, outputs)
+            x01 = keras.models.Model(model.inputs, outputs)
+
+            # frozen_graph = self.freeze_session02(K.get_session(), output_names=[out.op.name for out in model.outputs])
+            # tf.train.write_graph(frozen_graph, wkdir, pb_filename, as_text=False)
 
         return self.models[model]
 
@@ -601,40 +643,69 @@ class AutoRegressiveDecoder(object):
         """beam search解码
         说明：这里的topk即beam size；
         返回：最优解码序列。
+        [[101.0,7151.0,2190.0,3297.0,6818.0,2769.0,1744.0,6626.0,3683.0,1164.0,
+        3198.0,4522.0,2110.0,782.0,1447.0,2970.0,6825.0,1355.0,4495.0,1057.0,1862.0,
+        3198.0,6158.0,3683.0,3862.0,1068.0,2867.0,5318.0,2772.0,5442.0,1215.0,4415.0,
+        6716.0,819.0,6395.0,3209.0,3198.0,6158.0,3683.0,6356.0,3175.0,6206.0,3724.0,
+        7361.0,3309.0,1139.0,1862.0,4638.0,752.0,816.0,8024.0,3136.0,5509.0,6956.0,
+        2990.0,7008.0,6626.0,3683.0,1164.0,3198.0,4522.0,2110.0,782.0,1447.0,2418.0,
+        3800.0,2692.0,698.0,3419.0,6905.0,2127.0,3683.0,3175.0,4685.0,1068.0,6226.0,2137.0,511.0,102.0]]
         """
         inputs = [np.array([i]) for i in inputs]
         output_ids, output_scores = self.first_output_ids, np.zeros(1)
         for step in range(self.maxlen):
+            print("**"*50)
+            print("step", step)
+            print("inputs:", inputs)
+            print("output_ids:", output_ids)
+            print("states:", states)
+            print("temperature:", temperature)
             scores, states = self.predict(
                 inputs, output_ids, states, temperature, 'logits'
             )  # 计算当前得分
+            print("scores:", scores)
+            icount =0
+            maxIndex = 0
+            maxValue = -9999.0
+            while(icount<len(scores[0])):
+                if(scores[0][icount] > maxValue):
+                    maxValue = scores[0][icount]
+                    maxIndex = icount
+                icount = icount+1
+            print("maxIndex:", maxIndex, " maxValue:", maxValue)
             if step == 0:  # 第1步预测后将输入重复topk次
                 inputs = [np.repeat(i, topk, axis=0) for i in inputs]
             scores = output_scores.reshape((-1, 1)) + scores  # 综合累积得分
             indices = scores.argpartition(-topk, axis=None)[-topk:]  # 仅保留topk
+            print("indices:", indices)
             indices_1 = indices // scores.shape[1]  # 行索引
+            print("indices_1:", indices_1)
             indices_2 = (indices % scores.shape[1]).reshape((-1, 1))  # 列索引
-            output_ids = np.concatenate([output_ids[indices_1], indices_2],
-                                        1)  # 更新输出
-            output_scores = np.take_along_axis(
-                scores, indices, axis=None
-            )  # 更新得分
+            print("indices_2:", indices_2)
+            output_ids = np.concatenate([output_ids[indices_1], indices_2], 1)  # 更新输出
+            output_scores = np.take_along_axis(scores, indices, axis=None)  # 更新得分
+            print("scores.len:", len(scores[0]))
+            print("output_scores:", output_scores)
             is_end = output_ids[:, -1] == self.end_id  # 标记是否以end标记结束
             end_counts = (output_ids == self.end_id).sum(1)  # 统计出现的end标记
             if output_ids.shape[1] >= self.minlen:  # 最短长度判断
                 best = output_scores.argmax()  # 得分最大的那个
+                print("best:", best)
                 if is_end[best] and end_counts[best] >= min_ends:  # 如果已经终止
                     return output_ids[best]  # 直接输出
                 else:  # 否则，只保留未完成部分
                     flag = ~is_end | (end_counts < min_ends)  # 标记未完成序列
+                    print("flag:", flag)
                     if not flag.all():  # 如果有已完成的
                         inputs = [i[flag] for i in inputs]  # 扔掉已完成序列
                         output_ids = output_ids[flag]  # 扔掉已完成序列
                         output_scores = output_scores[flag]  # 扔掉已完成序列
                         end_counts = end_counts[flag]  # 扔掉已完成end计数
                         topk = flag.sum()  # topk相应变化
+                        print("topk:", topk)
         # 达到长度直接输出
-        return output_ids[output_scores.argmax()]
+        # result = output_ids[output_scores.argmax()]
+        return output_ids
 
     def random_sample(
         self,
