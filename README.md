@@ -46,6 +46,8 @@ pip install git+https://www.github.com/bojone/bert4keras.git
 albert_tiny_google_zh_489k.zip
 - <strong>百度网盘(4m4b)</strong>: https://pan.baidu.com/share/init?surl=UsJRo4E8DRshwpF8rA3i9A
 
+- <strong>THUCNews中文文本数据集</strong>: http://thuctc.thunlp.org/#%E4%B8%AD%E6%96%87%E6%96%87%E6%9C%AC%E5%88%86%E7%B1%BB%E6%95%B0%E6%8D%AE%E9%9B%86THUCNews
+
 <blockquote><strong>关于环境组合</strong>
   
 - 支持tf+keras和tf+tf.keras，后者需要提前传入环境变量TF_KERAS=1。
