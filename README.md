@@ -36,6 +36,9 @@ pip install git+https://www.github.com/bojone/bert4keras.git
 理论上兼容Python2和Python3，兼容tensorflow 1.14+和tensorflow 2.x，实验环境是Python 2.7、Tesorflow 1.14+以及Keras 2.3.1（已经在2.2.4、2.3.0、2.3.1、tf.keras下测试通过）。
 
 **为了获得最好的体验，建议你使用Tensorflow 1.14 + Keras 2.3.1组合。**
+**我实际安装为:Tensorflow 1.15.0 + Keras 2.3.1 组合**
+**conda install tensorflow==1.15.0 **
+**conda install keras==2.3.1 **
 
 <blockquote><strong>关于环境组合</strong>
   
