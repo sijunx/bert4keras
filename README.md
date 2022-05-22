@@ -59,6 +59,15 @@ albert_tiny_google_zh_489k.zip
 
 当然，乐于贡献的朋友如果发现了某些bug的话，也欢迎指出修正甚至Pull Requests～
 
+## 问答数据集网页链接：Question And Answer
+https://www.codeleading.com/article/25931974419/
+
+### 下载链接
+链接:https://pan.baidu.com/s/11C21BAupOpiYWoOx23J7Mg  密码:dh9w
+文件列表
+- SogouQA.json
+- WebQA.json
+
 ## 权重
 
 目前支持加载的权重：
