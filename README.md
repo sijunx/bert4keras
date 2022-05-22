@@ -60,6 +60,7 @@ albert_tiny_google_zh_489k.zip
 当然，乐于贡献的朋友如果发现了某些bug的话，也欢迎指出修正甚至Pull Requests～
 
 ## 问答数据集网页链接：Question And Answer
+https://github.com/bojone/dgcnn_for_reading_comprehension
 https://www.codeleading.com/article/25931974419/
 
 ### 下载链接
